@@ -318,6 +318,7 @@
     function resetAll() {
       intervals.length = 0; // очищаем массив
       timelineContainer.innerHTML = ''; // очищаем визуализацию
+      lastEndTime = null; // сбрасываем время окончания последнего удержания
       updateUI(); // обновляем статистику и отчёт
     }
 
