@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Таймер остановки внутреннего диалога (вертикальный таймлайн)</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0;
+      padding: 20px;
+      background: #f0f0f0;
+    }
+
+    h1 {
+      margin-top: 20px;
+    }
+
+    .big-button {
+      margin: 20px 0;
+      width: 200px;
+      height: 200px;
+      border-radius: 100px;
+      background-color: #4caf50;
+      border: none;
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .big-button:active {
+      background-color: #388e3c;
+    }
+
+    /* 
+      Контейнер для "вертикального" таймлайна:
+      - располагаем интервалы один под другим (column)
+      - align-items: flex-start, чтобы бары растягивались по горизонтали
+    */
+    #timelineContainer {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      align-items: flex-start;
+      margin-top: 20px;
+      max-width: 90%;
+    }
+
+    /* Общие стили для столбиков (теперь это горизонтальные полосы) */
+    .bar {
+      height: 30px;       /* фиксированная высота */
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      color: #fff;
+      font-size: 12px;
+      padding: 0 5px;
+      box-sizing: border-box;
+    }
+
+    .bar.hold {
+      background-color: #4caf50; /* зелёный */
+    }
+    .bar.pause {
+      background-color: #ff9800; /* оранжевый */
+    }
+
+    .stats {
+      margin-top: 20px;
+      background: #fff;
+      padding: 10px;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <h1>Таймер остановки внутреннего диалога</h1>
+
+  <button
+    class="big-button"
+    id="holdButton"
+  >
+    Зажмите
+  </button>
+
+  <!-- Контейнер для «вертикального» таймлайна -->
+  <div id="timelineContainer"></div>
+
+  <div class="stats" id="statsBox">
+    <p>Всего отрезков (hold + pause): <span id="count">0</span></p>
+    <p>Средняя длительность (сек): <span id="average">0</span></p>
+    <p>Максимальная длительность (сек): <span id="max">0</span></p>
+  </div>
+
+  <script>
+    /*
+      ЛОГИКА:
+      - При pointerdown начинается "hold". Перед началом "hold" рассчитываем "pause" (если есть предыдущий конец).
+      - При pointerup завершается "hold".
+      - Храним все интервалы (hold / pause) в массиве intervals.
+      - 1 сек = 20 px в ширину.
+      - Визуально каждый новый интервал (бар) располагается в новой строке (вертикальный список).
+    */
+
+    const holdButton = document.getElementById("holdButton");
+    const timelineContainer = document.getElementById("timelineContainer");
+    const countSpan = document.getElementById("count");
+    const averageSpan = document.getElementById("average");
+    const maxSpan = document.getElementById("max");
+
+    let isHolding = false;
+    let startHoldTime = null;
+    let lastEndTime = null; // время завершения предыдущего hold
+    const intervals = [];
+
+    // Обновляет статистику по всем интервалам
+    function updateStats() {
+      const count = intervals.length;
+      if (count === 0) {
+        countSpan.textContent = 0;
+        averageSpan.textContent = 0;
+        maxSpan.textContent = 0;
+        return;
+      }
+
+      // Переводим все интервалы из мс в секунды
+      const secondsArr = intervals.map(obj => obj.durationMs / 1000);
+      const totalSec = secondsArr.reduce((acc, val) => acc + val, 0);
+      const avg = totalSec / count;
+      const maxVal = Math.max(...secondsArr);
+
+      countSpan.textContent = count;
+      averageSpan.textContent = avg.toFixed(2);
+      maxSpan.textContent = maxVal.toFixed(2);
+    }
+
+    // Создаёт элемент-столбик (горизонтальную полосу) для визуализации интервала
+    function renderInterval(intervalObj) {
+      const { type, durationMs } = intervalObj;
+      // Ширина в пикселях (1 сек = 20 px)
+      const widthPx = (durationMs / 1000) * 20;
+
+      const bar = document.createElement("div");
+      bar.classList.add("bar", type);
+      bar.style.width = widthPx + "px";
+
+      // Подпись: сколько секунд + тип
+      const durationSec = (durationMs / 1000).toFixed(2);
+      bar.textContent = `${durationSec}s (${type})`;
+
+      timelineContainer.appendChild(bar);
+    }
+
+    // Добавляем интервал в массив + отображаем
+    function addInterval(type, durationMs) {
+      const newInterval = { type, durationMs };
+      intervals.push(newInterval);
+      renderInterval(newInterval);
+      updateStats();
+    }
+
+    // Начало удержания
+    function startHold(timeNow) {
+      isHolding = true;
+      startHoldTime = timeNow;
+      holdButton.textContent = "Удерживайте";
+
+      // Если есть прошлый hold, вычисляем "паузу"
+      if (lastEndTime !== null) {
+        const pauseDuration = timeNow - lastEndTime;
+        if (pauseDuration > 0) {
+          addInterval("pause", pauseDuration);
+        }
+      }
+    }
+
+    // Конец удержания
+    function endHold(timeNow) {
+      isHolding = false;
+      holdButton.textContent = "Зажмите";
+      const holdDuration = timeNow - startHoldTime;
+      addInterval("hold", holdDuration);
+      lastEndTime = timeNow;
+    }
+
+    holdButton.addEventListener("pointerdown", () => {
+      if (!isHolding) {
+        startHold(performance.now());
+      }
+    });
+
+    holdButton.addEventListener("pointerup", () => {
+      if (isHolding) {
+        endHold(performance.now());
+      }
+    });
+
+    holdButton.addEventListener("pointercancel", () => {
+      if (isHolding) {
+        endHold(performance.now());
+      }
+    });
+  </script>
+</body>
+</html>
