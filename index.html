@@ -137,6 +137,7 @@
     <p>Всего отрезков (hold + pause): <span id="count">0</span></p>
     <p>Средняя длительность (сек): <span id="average">0</span></p>
     <p>Максимальная длительность (сек): <span id="max">0</span></p>
+    <button id="resetButton">Сбросить</button>
   </div>
 
   <!-- Markdown-отчёт -->
@@ -313,6 +314,16 @@
     });
 
     copyButton.addEventListener("click", copyReport);
+    // Сброс всех данных и интерфейса
+    function resetAll() {
+      intervals.length = 0; // очищаем массив
+      timelineContainer.innerHTML = ''; // очищаем визуализацию
+      updateUI(); // обновляем статистику и отчёт
+    }
+
+    // Событие для кнопки сброса
+    const resetButton = document.getElementById("resetButton");
+    resetButton.addEventListener("click", resetAll);
   </script>
 </body>
 </html>
