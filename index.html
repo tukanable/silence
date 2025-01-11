@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0"/>
   <meta charset="UTF-8" />
   <title>Таймер остановки внутреннего диалога (вертикальный таймлайн)</title>
+  <!-- Отключаем Zoom на мобильных устройствах -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <style>
     body {
       font-family: sans-serif;
@@ -31,14 +31,18 @@
       font-size: 20px;
       cursor: pointer;
       outline: none;
+      /* Запрещаем выделение текста на кнопке */
+      user-select: none;          /* стандарт */
+      -webkit-user-select: none;  /* Safari */
+      -ms-user-select: none;      /* IE 10 and older */
     }
 
     .big-button:active {
       background-color: #388e3c;
     }
 
-    /* 
-      Контейнер для "вертикального" таймлайна:
+    /*
+      Контейнер для «вертикального» таймлайна:
       - располагаем интервалы один под другим (column)
       - align-items: flex-start, чтобы бары растягивались по горизонтали
     */
@@ -51,7 +55,7 @@
       max-width: 90%;
     }
 
-    /* Общие стили для столбиков (теперь это горизонтальные полосы) */
+    /* Общие стили для столбиков (горизонтальные полосы) */
     .bar {
       height: 30px;       /* фиксированная высота */
       border-radius: 3px;
@@ -75,6 +79,43 @@
       background: #fff;
       padding: 10px;
       border: 1px solid #ccc;
+      width: 300px;
+    }
+
+    /* Блок для Markdown-отчёта */
+    #reportContainer {
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      width: 300px;
+    }
+
+    #reportContainer label {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    #reportTextarea {
+      width: 100%;
+      height: 150px;
+      box-sizing: border-box;
+      resize: none;
+      font-family: monospace;
+      margin-bottom: 10px;
+    }
+
+    #copyButton {
+      padding: 8px 15px;
+      border: none;
+      border-radius: 4px;
+      background-color: #2196f3;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    #copyButton:active {
+      background-color: #1565c0;
     }
   </style>
 </head>
@@ -91,20 +132,29 @@
   <!-- Контейнер для «вертикального» таймлайна -->
   <div id="timelineContainer"></div>
 
+  <!-- Блок статистики -->
   <div class="stats" id="statsBox">
     <p>Всего отрезков (hold + pause): <span id="count">0</span></p>
     <p>Средняя длительность (сек): <span id="average">0</span></p>
     <p>Максимальная длительность (сек): <span id="max">0</span></p>
   </div>
 
+  <!-- Markdown-отчёт -->
+  <div id="reportContainer">
+    <label for="reportTextarea">Markdown-отчёт:</label>
+    <textarea id="reportTextarea" readonly></textarea>
+    <button id="copyButton">Скопировать</button>
+  </div>
+
   <script>
     /*
       ЛОГИКА:
-      - При pointerdown начинается "hold". Перед началом "hold" рассчитываем "pause" (если есть предыдущий конец).
+      - При pointerdown начинается "hold". Если был предыдущий hold, считаем "pause".
       - При pointerup завершается "hold".
       - Храним все интервалы (hold / pause) в массиве intervals.
       - 1 сек = 20 px в ширину.
-      - Визуально каждый новый интервал (бар) располагается в новой строке (вертикальный список).
+      - Вертикальный список, где каждый элемент — горизонтальная полоса с шириной, пропорциональной длительности.
+      - В конце добавляем блок для формирования и копирования Markdown-отчёта.
     */
 
     const holdButton = document.getElementById("holdButton");
@@ -113,10 +163,19 @@
     const averageSpan = document.getElementById("average");
     const maxSpan = document.getElementById("max");
 
+    const reportTextarea = document.getElementById("reportTextarea");
+    const copyButton = document.getElementById("copyButton");
+
     let isHolding = false;
     let startHoldTime = null;
     let lastEndTime = null; // время завершения предыдущего hold
     const intervals = [];
+
+    // Обновляем статистику и отчёт
+    function updateUI() {
+      updateStats();
+      updateReport();
+    }
 
     // Обновляет статистику по всем интервалам
     function updateStats() {
@@ -161,7 +220,7 @@
       const newInterval = { type, durationMs };
       intervals.push(newInterval);
       renderInterval(newInterval);
-      updateStats();
+      updateUI();
     }
 
     // Начало удержания
@@ -170,7 +229,7 @@
       startHoldTime = timeNow;
       holdButton.textContent = "Удерживайте";
 
-      // Если есть прошлый hold, вычисляем "паузу"
+      // Если есть прошлый hold, вычисляем "pause"
       if (lastEndTime !== null) {
         const pauseDuration = timeNow - lastEndTime;
         if (pauseDuration > 0) {
@@ -188,6 +247,53 @@
       lastEndTime = timeNow;
     }
 
+    // Генерация Markdown-отчёта
+    function updateReport() {
+      if (intervals.length === 0) {
+        reportTextarea.value = "Нет данных для отчёта.";
+        return;
+      }
+
+      const lines = [];
+      const totalCount = intervals.length;
+      const secondsArr = intervals.map(obj => obj.durationMs / 1000);
+      const totalSec = secondsArr.reduce((acc, val) => acc + val, 0);
+      const avg = totalSec / totalCount;
+      const maxVal = Math.max(...secondsArr);
+
+      // Формируем шапку отчёта с датой/временем
+      const currentDate = new Date().toLocaleString("ru-RU");
+      lines.push(`# Отчёт о практике: ${currentDate}`);
+      lines.push("");
+
+      // Перечисляем все интервалы
+      lines.push("## Интервалы");
+      intervals.forEach((int, index) => {
+        const sec = (int.durationMs / 1000).toFixed(2);
+        lines.push(`- **${index + 1}.** ${int.type}: ${sec} сек`);
+      });
+      lines.push("");
+
+      // Итоговая статистика
+      lines.push("## Итоговая статистика");
+      lines.push(`- Всего отрезков: **${totalCount}**`);
+      lines.push(`- Средняя длительность (сек): **${avg.toFixed(2)}**`);
+      lines.push(`- Максимальная длительность (сек): **${maxVal.toFixed(2)}**`);
+
+      reportTextarea.value = lines.join("\n");
+    }
+
+    // Копирование содержимого textarea в буфер обмена
+    function copyReport() {
+      reportTextarea.select();
+      document.execCommand("copy");
+      // Альтернативно (современный метод):
+      // navigator.clipboard.writeText(reportTextarea.value);
+      // alert или другой сигнал
+      // alert("Отчёт скопирован в буфер обмена!");
+    }
+
+    // События
     holdButton.addEventListener("pointerdown", () => {
       if (!isHolding) {
         startHold(performance.now());
@@ -205,6 +311,8 @@
         endHold(performance.now());
       }
     });
+
+    copyButton.addEventListener("click", copyReport);
   </script>
 </body>
 </html>
