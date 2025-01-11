@@ -297,6 +297,7 @@
     // События
     holdButton.addEventListener("pointerdown", () => {
       if (!isHolding) {
+        navigator.vibrate(100); // вибрация на 100 мс
         startHold(performance.now());
       }
     });
